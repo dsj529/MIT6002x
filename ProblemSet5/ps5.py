@@ -4,19 +4,19 @@
 #
 
 import string
-# This imports everything from `graph.py` as if it was defined in this file!
+
 from graph import * 
 
+
+# This imports everything from `graph.py` as if it was defined in this file!
 #
 # Problem 2: Building up the Campus Map
 #
 # Before you write any code, write a couple of sentences here 
 # describing how you will model this problem as a graph. 
-
 # This is a helpful exercise to help you organize your
 # thoughts before you tackle a big design problem!
 #     
-
 def load_map(mapFilename):
     """ 
     Parses the map file and constructs a directed graph
@@ -45,18 +45,30 @@ def load_map(mapFilename):
         try:
             graph.addEdge(edge)
         except ValueError:
-            print 'Something very wrong happened.'
+            print('Something very wrong happened.')
 
-    print "Loading map from file..."
+    print("Loading map from file...")
     mitMap = WeightedDigraph()    
     with open(mapFilename) as f:
         for line in f:
             s,d,t,o = line.split()
-            addNode(mitMap, Node(s))
-            addNode(mitMap, Node(d))
-            addEdge(mitMap, WeightedEdge(Node(s),Node(d),t,o))
-    print 'Done.'
+            src = Node(s)
+            dest = Node(d)
+            addNode(mitMap, src)
+            addNode(mitMap, dest)
+            addEdge(mitMap, WeightedEdge(src, dest, t, o))
+    print('Done.')
     return mitMap
+
+
+def getPathDist(digraph, path):
+    totDist = 0
+    totOutDist = 0
+    for i in range(len(path) - 1):
+        dist, outDist = digraph.getDistances(path[i], path[i+1])
+        totDist += dist
+        totOutDist += outDist
+    return totDist, totOutDist
 
 #
 # Problem 3: Finding the Shortest Path using Brute Force Search
@@ -88,49 +100,41 @@ def bruteForceSearch(digraph, start, end, maxTotalDist, maxDistOutdoors):
 
         If there exists no path that satisfies maxTotalDist and
         maxDistOutdoors constraints, then raises a ValueError.
-    """
-    def findPaths(digraph, start, end, path = []):
+    """  
+    def dfs(digraph, start, end, maxTotalDist, maxDistOutdoors, path=[], collection=[]):
         path = path + [start]
+        
+        totDist, totOutDist = getPathDist(digraph, path)
+        if totDist > maxTotalDist or totOutDist > maxDistOutdoors:
+            return None
+        
         if start == end:
-            return [path]
+            collection.append(path)
+            return path
         
-        paths = []
-        for child in digraph.childrenOf(start):        
+        for child in digraph.childrenOf(start):
             if child not in path:
-                newPaths = findPaths(digraph, child, end, path)
-                for newPath in newPaths:
-                    paths.append(newPath)
-        return paths
+                dfs(digraph, child, end, maxTotalDist, maxDistOutdoors, path, collection)
         
-    def evalPaths(digraph, paths, maxTot, maxOut):
-        bestPath = None
-        bestDist = None
-        for path in paths:
-            curTot = 0.0
-            curOut = 0.0
-            fullPath = True
-            for i in range(len(path)-1):
-                dists = digraph.getDistances(path[i], path[i+1])
-                curTot += dists[0]
-                curOut += dists[1]
-                if  curTot > maxTot or curOut > maxOut:
-                    fullPath = False
-                    break
-            if fullPath:
-                if bestDist == None or curTot < bestDist:
-                    bestPath = path
-                    bestDist = curTot
-        if bestPath:
-            return [str(i) for i in bestPath]
-        else:
-            return bestPath
+        return collection
     
-    paths = findPaths(Node(start), Node(end))
-    best = evalPaths(paths, maxTotalDist, maxDistOutdoors)    
-    if best:
-        return best
-    else:
-        raise ValueError()
+    results = dfs(digraph, Node(start), Node(end), maxTotalDist, maxDistOutdoors)
+    shortest = 0
+    shortestPath = None
+    for path in results:
+        totDist, totOutDist = getPathDist(digraph, path)
+        if (shortest == 0 or totDist < shortest) \
+                and (totDist <= maxTotalDist and totOutDist <= maxDistOutdoors):
+            shortestPath = path
+            shortest = totDist
+            
+    if shortestPath is None:
+        raise ValueError
+    ret = []
+    for node in shortestPath:
+        rest.append(str(node))
+    return ret
+        
     
                       
 # Problem 4: Finding the Shorest Path using Optimized Search Method
@@ -160,44 +164,40 @@ def directedDFS(digraph, start, end, maxTotalDist, maxDistOutdoors):
         If there exists no path that satisfies maxTotalDist and
         maxDistOutdoors constraints, then raises a ValueError.
     """
-    def pathDists(path):
-        if len(path) == 1:
-            return [0,0]
-        else:
-            tot, out = 0, 0
-            for i in range(len(path)-1):
-                dists = digraph.getDistances(path[i], path[i+1])
-                tot += dists[0]
-                out += dists[1]
-            return [tot, out]
-    
-    def badPath(dists, limits):
-        return dists[0] > limits[0] or dists[1] > limits[1]
-    
-    def findBest(start, end, path = [],
-                 bounds = [maxTotalDist, maxDistOutdoors], best = None):
-#    """ given a weighted and directed graph, returns the shortest path from start to end, meeting the constraints of maxDists.
-#          maxDists and curDists are both lists recording the total distance and outdoor distance traveled in that order.
-#          best stores the best path found, total distance, and outdoor distance, in that order."""
+    def ddfs(digraph, start, end, maxTotalDist, maxDistOutdoors, path=[], shortest=[0, None]):
         path = path + [start]
+        
+        totDist, totOutDist =  getPathDist(digraph, path)
+        if (td > shortest[0] and shortest[0] != 0)\
+                or totDist > maxTotalDist or totOutDist > maxDistOutdoors:
+            return None
+        
         if start == end:
             return path
-    
-        for child in digraph.childrenOf(start):
-            if child not in path: # avoid cycles
-                newDists = pathDists(path)
-                if best == None or not badPath(newDists, bounds):
-                    newPath = findBest(child, end, path, bounds, best)
-                    if newPath != None:
-                        best = newPath
-                        bounds = pathDists(newPath)
-        return best
         
-    best = findBest(Node(start), Node(end))
-    if best:
-        return [str(i) for i in best]
-    else:
-        raise ValueError()
+        for child in digraph.childrenOf(start):
+            if child not in path:
+                newPath = ddfs(digraph, node, end, maxTotalDist, maxDistOutdoors, path, shortest)
+                if newPath is not None:
+                    totDist, totOutDist = getPathDist(digraph, newPath)
+                    if shortest[1] is None:
+                        shortest = [totDist, newPath]
+                    elif totDist < shortest[0]:
+                        shortest[0] = totDist
+                        shortest[1] = new_path
+                        
+        if shortest is None:
+            raise ValueError
+        return shortest[1]
+    
+    shortest = ddfs(digraph, Node(start), Node(end), maxTotalDist, maxDistOutdoors)
+    ret = []
+    try:
+        for node in shortest:
+            ret.append(str(node))
+    except TypeError:
+        raise ValueError
+    return ret
 
 # Uncomment below when ready to test
 #### NOTE! These tests may take a few minutes to run!! ####
